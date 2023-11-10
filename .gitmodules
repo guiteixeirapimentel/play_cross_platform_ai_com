@@ -1,0 +1,3 @@
+[submodule "dependencies/alpaca"]
+	path = dependencies/alpaca
+	url = git@github.com:p-ranav/alpaca.git
