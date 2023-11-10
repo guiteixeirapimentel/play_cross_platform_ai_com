@@ -14,6 +14,36 @@
 #include <string>
 #include <future>
 #include <vector>
+#include <algorithm>
+
+#include "SharedStructs.hpp"
+
+using namespace pimentel;
+
+void sendAkn(int connfd)
+{
+    const auto msg = Aknowledge{ .m_valid = true, .m_message = "Hello from the server!" };
+
+	const auto msgPacketBytes = serializeMessage(generateMessagePacket(msg));
+
+    write(connfd, msgPacketBytes.data(), msgPacketBytes.size());
+}
+
+struct ServerVisitor : public pimentel::MessageVisitor
+{
+    void visit(const Aknowledge& akn) override
+    {
+        std::cout << "Got akn msg with content " << akn.m_message << " valid? " << akn.m_valid << std::endl;
+
+
+    }
+
+    void handleInvalidData(std::error_code ec) override
+    {
+		std::cout << "Handling error code " << ec << std::endl;
+    }
+
+};
 
 std::vector<std::thread> connections;
 
@@ -38,7 +68,6 @@ int main(int, char **)
 
     if(bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) != 0)
     {
-        
         std::cout << "Failed to bind on port " << port << std::endl;
         return 1;
     }
@@ -59,27 +88,26 @@ int main(int, char **)
             static constexpr auto BUFFER_SIZE = 4096;
             char buffer[BUFFER_SIZE];
 
-            std::stringstream readData;
+            std::vector<uint8_t> readData;
 
             auto bytesRead = read(connfd, buffer, BUFFER_SIZE);
 
             while (bytesRead == BUFFER_SIZE)
             {
-                readData.write(buffer, bytesRead);
+                std::copy(buffer, buffer + bytesRead, std::back_inserter(readData));
                 bytesRead = read(connfd, buffer, BUFFER_SIZE);
             }
 
-            readData.write(buffer, bytesRead);
+            std::copy(buffer, buffer + bytesRead, std::back_inserter(readData));
 
-            std::cout << "Got request: " << readData.str() << std::endl;
+            std::cout << "Got request size: " << readData.size() << std::endl;
+            
+            ServerVisitor sv;
 
-            std::stringstream out;
+            handleData(readData, sv);
 
-            out << "Hello from brunto!\n";
+            sendAkn(connfd);
 
-            const auto res = out.str();
-
-            write(connfd, res.c_str(), res.size());
             close(connfd);
         };
 
